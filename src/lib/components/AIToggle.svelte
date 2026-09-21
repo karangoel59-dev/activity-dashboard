@@ -3,33 +3,54 @@
 	import { invalidateAll } from '$app/navigation';
 	import { onMount } from 'svelte';
 
+	// `row` is a labelled switch for the sidebar; `icon` is a bare button for the phone top bar
+	let { variant = 'icon' }: { variant?: 'icon' | 'row' } = $props();
+
 	let enabled = $state(false);
 
 	onMount(() => {
-		// Read cookie on mount
 		enabled = document.cookie.includes('ai_insights_enabled=true');
 	});
 
 	function toggle() {
 		enabled = !enabled;
-		// Set cookie (expire in 1 year)
 		const maxAge = 60 * 60 * 24 * 365;
 		document.cookie = `ai_insights_enabled=${enabled}; path=/; max-age=${maxAge}; samesite=strict`;
-
-		// Invalidate all load functions to re-fetch data without AI or with AI
+		// Re-run every page's load so summaries appear or disappear right away
 		invalidateAll();
 	}
 </script>
 
-<button
-	onclick={toggle}
-	class="flex items-center justify-center rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-	aria-label="Toggle AI Insights"
-	title={enabled ? 'Disable AI Insights' : 'Enable AI Insights'}
->
-	{#if enabled}
-		<Sparkles size={20} class="text-indigo-500" />
-	{:else}
-		<Sparkles size={20} class="opacity-50" />
-	{/if}
-</button>
+{#if variant === 'row'}
+	<button
+		onclick={toggle}
+		role="switch"
+		aria-checked={enabled}
+		title="Summarise and classify your work with the language model"
+		class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-raised hover:text-ink"
+	>
+		<Sparkles size={18} class={enabled ? 'text-accent' : ''} />
+		<span class="flex-1 text-left">AI insights</span>
+		<span
+			class="relative h-5 w-9 shrink-0 rounded-full transition-colors {enabled
+				? 'bg-accent'
+				: 'bg-line-strong'}"
+		>
+			<span
+				class="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform {enabled
+					? 'translate-x-4'
+					: ''}"
+			></span>
+		</span>
+	</button>
+{:else}
+	<button
+		onclick={toggle}
+		aria-label="Toggle AI insights"
+		aria-pressed={enabled}
+		title={enabled ? 'Disable AI insights' : 'Enable AI insights'}
+		class="rounded-lg p-2 text-ink-2 transition-colors hover:bg-raised hover:text-ink"
+	>
+		<Sparkles size={18} class={enabled ? 'text-accent' : 'opacity-60'} />
+	</button>
+{/if}

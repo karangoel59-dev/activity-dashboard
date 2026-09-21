@@ -1,13 +1,5 @@
-import { getAllTasks } from '$lib/server/tasks';
+import { getEntries } from '$lib/server/flow';
+import type { PageServerLoad } from './$types';
 
-export async function load() {
-	const allTasks = await getAllTasks();
-	return {
-		tasks: allTasks.filter(
-			(task) =>
-				task.Task.toLowerCase() !== 'things to note' &&
-				task.Task.toLowerCase() !== 'quick links' &&
-				task.Type?.toLowerCase() !== 'quick links'
-		)
-	};
-}
+// Read on every visit: entries are plain files, so new writing shows up on reload
+export const load: PageServerLoad = () => getEntries();

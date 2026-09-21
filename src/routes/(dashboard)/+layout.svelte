@@ -1,82 +1,105 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import AIToggle from '$lib/components/AIToggle.svelte';
-	import FolderUpload from '$lib/components/FolderUpload.svelte';
-	import { Link2, FileText, ScrollText, Calendar, Code2 } from '@lucide/svelte';
+	import { ScrollText, Code2, GitCommitHorizontal, ChartColumnBig } from '@lucide/svelte';
 
 	let { children } = $props();
 
 	const navItems = [
-		{ name: 'Bookmarks', path: '/links', icon: Link2 },
-		{ name: 'Notebooks', path: '/notes', icon: FileText },
-		{ name: 'Journal', path: '/logs', icon: ScrollText },
-		{ name: 'Schedule', path: '/calendar', icon: Calendar }
-	];
+		{ name: 'Activity', path: '/activity', icon: GitCommitHorizontal, hint: 'What you shipped' },
+		{ name: 'Metrics', path: '/metrics', icon: ChartColumnBig, hint: 'Numbers and trends' },
+		{ name: 'Journal', path: '/logs', icon: ScrollText, hint: 'Your writing' }
+	] as const;
+
+	const isActive = (path: string) => page.url.pathname.startsWith(path);
 </script>
 
-<div
-	class="flex min-h-screen flex-col bg-white font-sans text-[#37352f] transition-colors duration-200 dark:bg-gray-900 dark:text-gray-100"
->
-	<!-- Sticky Top Navbar -->
-	<nav
-		class="sticky top-0 z-50 flex items-center justify-between border-b border-gray-200 bg-white/80 px-4 py-3 backdrop-blur-md transition-colors duration-200 sm:px-8 sm:py-5 dark:border-gray-800 dark:bg-gray-900/80"
+<div class="min-h-screen">
+	<!-- Sidebar: desktop -->
+	<aside
+		class="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-line bg-surface px-3 py-5 md:flex"
 	>
-		<div
-			class="flex shrink-0 items-center gap-2 text-lg font-semibold text-gray-900 dark:text-gray-100"
-		>
-			<Code2 class="text-blue-500" size={24} />
-			<span class="hidden sm:inline">karangoel59-dev</span>
-		</div>
+		<a href={resolve('/activity')} class="mb-7 flex items-center gap-2.5 px-2.5">
+			<span
+				class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-ink shadow-sm"
+			>
+				<Code2 size={18} />
+			</span>
+			<span class="leading-tight">
+				<span class="block text-sm font-semibold tracking-tight">karangoel59-dev</span>
+				<span class="block text-[11px] text-ink-3">Work dashboard</span>
+			</span>
+		</a>
 
-		<!-- Desktop Nav Links -->
-		<div class="ml-8 hidden flex-1 justify-start space-x-2 sm:flex">
-			{#each navItems as item}
+		<nav class="flex flex-col gap-0.5" aria-label="Main">
+			{#each navItems as item (item.path)}
 				{@const Icon = item.icon}
 				<a
-					href={item.path}
-					class="flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors {$page.url.pathname.startsWith(
+					href={resolve(item.path)}
+					aria-current={isActive(item.path) ? 'page' : undefined}
+					class="group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors {isActive(
 						item.path
 					)
-						? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
-						: 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'}"
+						? 'bg-accent/10 text-accent'
+						: 'text-ink-2 hover:bg-raised hover:text-ink'}"
 				>
 					<Icon size={18} />
-					{item.name}
+					<span class="flex-1">{item.name}</span>
+					<span
+						class="text-[11px] font-normal text-ink-3 opacity-0 transition-opacity group-hover:opacity-100"
+						>{item.hint}</span
+					>
 				</a>
 			{/each}
-		</div>
+		</nav>
 
-		<!-- Toggles & Actions -->
-		<div class="ml-auto flex shrink-0 items-center gap-2 sm:gap-4">
-			<FolderUpload />
+		<div class="mt-auto flex flex-col gap-0.5 border-t border-line pt-3">
+			<AIToggle variant="row" />
+			<ThemeToggle variant="row" />
+		</div>
+	</aside>
+
+	<!-- Top bar: phones -->
+	<header
+		class="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-bg/85 px-4 py-2.5 backdrop-blur md:hidden"
+	>
+		<a href={resolve('/activity')} class="flex items-center gap-2">
+			<span class="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-accent-ink">
+				<Code2 size={16} />
+			</span>
+			<span class="text-sm font-semibold tracking-tight">karangoel59-dev</span>
+		</a>
+		<div class="flex items-center gap-1">
 			<AIToggle />
 			<ThemeToggle />
 		</div>
-	</nav>
+	</header>
 
-	<main class="mx-auto w-full max-w-[1400px] flex-1 px-4 pt-6 pb-24 sm:px-6 sm:pt-8 sm:pb-24">
-		<!-- Page Content -->
-		<div class="space-y-4 text-base leading-relaxed">
+	<main class="md:pl-60">
+		<div class="mx-auto w-full max-w-6xl px-4 pt-6 pb-28 sm:px-8 md:pt-10 md:pb-16">
 			{@render children()}
 		</div>
 	</main>
 
-	<!-- Mobile Bottom Navigation Bar -->
+	<!-- Tab bar: phones -->
 	<nav
-		class="fixed right-0 bottom-0 left-0 z-50 border-t border-gray-200 bg-white/90 backdrop-blur-md sm:hidden dark:border-gray-800 dark:bg-gray-900/90"
+		class="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur md:hidden"
 		style="padding-bottom: env(safe-area-inset-bottom, 0px);"
+		aria-label="Main"
 	>
-		<div class="flex h-16 items-center justify-around">
-			{#each navItems as item}
+		<div class="flex h-16 items-stretch justify-around">
+			{#each navItems as item (item.path)}
 				{@const Icon = item.icon}
 				<a
-					href={item.path}
-					class="flex h-full w-full flex-col items-center justify-center space-y-1 transition-colors {$page.url.pathname.startsWith(
+					href={resolve(item.path)}
+					aria-current={isActive(item.path) ? 'page' : undefined}
+					class="flex flex-1 flex-col items-center justify-center gap-1 transition-colors {isActive(
 						item.path
 					)
-						? 'text-blue-600 dark:text-blue-400'
-						: 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}"
+						? 'text-accent'
+						: 'text-ink-3 hover:text-ink'}"
 				>
 					<Icon size={20} />
 					<span class="text-[10px] font-medium">{item.name}</span>

@@ -18,6 +18,10 @@ RUN npm run build
 # Stage 2: Production environment
 FROM node:24-alpine
 
+# git is only used in full mode, to keep clones of your repositories. A hosted copy running with
+# DASHBOARD_MODE=read never calls it and could do without. (Reftable support needs git >= 2.46.)
+RUN apk add --no-cache git
+
 WORKDIR /app
 
 # Copy built assets and production package.json
