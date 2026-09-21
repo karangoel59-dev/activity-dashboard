@@ -31,7 +31,6 @@ COPY package.json .
 
 # Cloud Run uses the PORT environment variable.
 ENV PORT=8080
-ENV BODY_SIZE_LIMIT=0
 EXPOSE 8080
 
 # Start the application
