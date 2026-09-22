@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { marked } from 'marked';
-	import { ArrowLeftRight, BookOpen, Search, TriangleAlert } from '@lucide/svelte';
+	import { ArrowLeftRight, BookOpen, Search, TriangleAlert, X } from '@lucide/svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { getPillColor } from '$lib/utils';
 
@@ -11,11 +11,19 @@
 	let activeTag = $state('');
 	let sort = $state<'desc' | 'asc'>('desc');
 
-	// Long entries are clamped on their card until expanded
+	// Long entries are clamped on their card; clicking one opens the full entry in a modal
 	const CLAMP_WORDS = 90;
-	let expanded = $state<Record<string, boolean>>({});
+	let openId = $state<string | null>(null);
+	let dialogEl = $state<HTMLDialogElement | null>(null);
 
 	const byId = $derived(Object.fromEntries(data.entries.map((e) => [e.id, e])));
+	const openEntry = $derived(openId ? byId[openId] : null);
+
+	$effect(() => {
+		if (!dialogEl) return;
+		if (openId && !dialogEl.open) dialogEl.showModal();
+		if (!openId && dialogEl.open) dialogEl.close();
+	});
 	const totalWords = $derived(data.entries.reduce((sum, e) => sum + e.words, 0));
 
 	const tagCounts = $derived.by(() => {
@@ -187,10 +195,9 @@
 				<div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
 					{#each entries as entry (entry.id)}
 						{@const long = entry.words > CLAMP_WORDS}
-						{@const clamped = long && !expanded[entry.id]}
 						<article
 							id="e-{entry.id}"
-							class="card rise flex scroll-mt-24 flex-col gap-3 p-5 transition-[box-shadow,border-color] hover:border-line-strong hover:shadow-md"
+							class="card rise flex min-w-0 scroll-mt-24 flex-col gap-3 p-5 transition-[box-shadow,border-color] hover:border-line-strong hover:shadow-md"
 						>
 							<header class="flex items-center justify-between text-xs text-ink-3">
 								<span class="font-medium text-ink-2 tabular-nums">{time(entry.created)}</span>
@@ -201,29 +208,36 @@
 
 							{#if entry.body}
 								<div class="relative">
-									<div
-										class="prose-app prose max-w-none font-serif text-[15.5px] leading-7 prose-headings:font-serif prose-p:my-2 {clamped
-											? 'max-h-60 overflow-hidden'
-											: ''}"
-									>
-										<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-										{@html marked.parse(entry.body, { breaks: true, async: false })}
-									</div>
-									{#if clamped}
+									{#if long}
 										<div
-											class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-surface to-transparent"
-										></div>
+											role="button"
+											tabindex={0}
+											onclick={() => (openId = entry.id)}
+											onkeydown={(e) => {
+												if (e.key === 'Enter' || e.key === ' ') {
+													e.preventDefault();
+													openId = entry.id;
+												}
+											}}
+											class="prose-app prose max-h-60 max-w-none cursor-pointer overflow-hidden font-serif text-[15.5px] leading-7 break-words prose-headings:font-serif prose-p:my-2"
+										>
+											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+											{@html marked.parse(entry.body, { breaks: true, async: false })}
+										</div>
+										<div
+											class="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-linear-to-t from-surface to-transparent pb-1.5"
+										>
+											<span class="text-xs font-medium text-accent">Read full entry</span>
+										</div>
+									{:else}
+										<div
+											class="prose-app prose max-w-none font-serif text-[15.5px] leading-7 break-words prose-headings:font-serif prose-p:my-2"
+										>
+											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+											{@html marked.parse(entry.body, { breaks: true, async: false })}
+										</div>
 									{/if}
 								</div>
-								{#if long}
-									<button
-										type="button"
-										onclick={() => (expanded[entry.id] = !expanded[entry.id])}
-										class="self-start text-xs font-medium text-accent hover:underline"
-									>
-										{expanded[entry.id] ? 'Show less' : 'Show more'}
-									</button>
-								{/if}
 							{:else}
 								<p class="text-sm text-ink-3 italic">Empty entry</p>
 							{/if}
@@ -269,4 +283,69 @@
 			</div>
 		{/each}
 	</div>
+
+	<dialog
+		bind:this={dialogEl}
+		onclose={() => (openId = null)}
+		onclick={(e) => {
+			if (e.target === dialogEl) dialogEl?.close();
+		}}
+		class="m-auto max-h-[85vh] w-full max-w-2xl rounded-2xl border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+	>
+		{#if openEntry}
+			<div class="flex max-h-[85vh] flex-col gap-3 overflow-y-auto p-6">
+				<header class="flex items-start justify-between gap-4 text-xs text-ink-3">
+					<span class="font-medium text-ink-2 tabular-nums"
+						>{dayLabel(localDay(openEntry.created))} · {time(openEntry.created)}</span
+					>
+					<button
+						type="button"
+						onclick={() => dialogEl?.close()}
+						aria-label="Close"
+						class="-m-1 shrink-0 rounded-full p-1 text-ink-3 transition-colors hover:bg-raised hover:text-ink"
+					>
+						<X size={16} />
+					</button>
+				</header>
+
+				<div
+					class="prose-app prose max-w-none font-serif text-[15.5px] leading-7 break-words prose-headings:font-serif prose-p:my-2"
+				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html marked.parse(openEntry.body, { breaks: true, async: false })}
+				</div>
+
+				{#if openEntry.tags.length || openEntry.related.length}
+					<footer class="flex flex-col gap-2 border-t border-line pt-3">
+						{#if openEntry.tags.length}
+							<div class="flex flex-wrap gap-1.5">
+								{#each openEntry.tags as tag (tag)}
+									<button
+										type="button"
+										onclick={() => {
+											activeTag = tag;
+											dialogEl?.close();
+										}}
+										class="chip transition-opacity hover:opacity-80 {getPillColor(tag)}"
+										>#{tag}</button
+									>
+								{/each}
+							</div>
+						{/if}
+						{#each openEntry.related as id (id)}
+							<a
+								href="{resolve('/logs')}#e-{id}"
+								onclick={() => dialogEl?.close()}
+								class="flex items-center gap-1.5 truncate text-xs text-ink-3 transition-colors hover:text-accent"
+							>
+								<ArrowLeftRight size={12} class="shrink-0" />
+								<span class="truncate">{localDay(byId[id].created)} · {preview(byId[id].body)}</span
+								>
+							</a>
+						{/each}
+					</footer>
+				{/if}
+			</div>
+		{/if}
+	</dialog>
 {/if}
