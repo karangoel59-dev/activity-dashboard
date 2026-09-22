@@ -310,12 +310,18 @@ interface CommitResult {
 }
 
 const isConflict = (e: unknown) => /expected|stale|did not match|not up to date/i.test(String(e));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Change files in the state. `change` receives the current files and returns only what should
  * differ (a path to its new text, or null to delete it). If the state moved on since it was read
  * (another machine published), the change is computed again on the newer state and retried, so
  * two writers never overwrite each other. Nothing is written when nothing changed.
+ *
+ * Every attempt re-reads the state and recomputes `change` against it, so retrying is safe
+ * regardless of why the previous attempt failed, not only on a conflicting head. Without this, a
+ * transient GitHub error (a rate limit, a dropped mutation) would drop the change after one try,
+ * which for an optimistic write silently reverts whatever the user just toggled.
  */
 function commit(
 	change: (files: StateFiles) => Changes | Promise<Changes>,
@@ -385,8 +391,10 @@ function commit(
 				writeCache(snapshot);
 				return true;
 			} catch (e) {
-				if (!isConflict(e) || attempt === 4) throw e;
-				// someone published in between: loop, re-read, and apply the change to what is there now
+				if (attempt === 4) throw e;
+				// A conflict just means someone else published in between: re-read and retry right
+				// away. Anything else (a rate limit, a dropped mutation) gets a short backoff first.
+				if (!isConflict(e)) await sleep(attempt * 500);
 			}
 		}
 		return false;
