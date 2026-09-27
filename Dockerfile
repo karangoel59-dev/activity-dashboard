@@ -1,37 +1,37 @@
-# Use an official Node.js runtime as a parent image
+# Stage 1: Build the application
 FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Copy package manifests and install dependencies
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy the rest of the application
+# Copy source code and build
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Stage 2: Production environment
+# Stage 2: Production runtime environment
 FROM node:24-alpine
 
-# git is only used in full mode, to keep clones of your repositories. A hosted copy running with
-# DASHBOARD_MODE=read never calls it and could do without. (Reftable support needs git >= 2.46.)
-RUN apk add --no-cache git
+# git is needed in full mode to maintain bare clones of repositories (reftable support needs git >= 2.46)
+# curl is added for container health checks
+RUN apk add --no-cache git curl
 
 WORKDIR /app
 
-# Copy built assets and production package.json
+# Copy built application and dependencies
 COPY --from=builder /app/build build/
 COPY --from=builder /app/node_modules node_modules/
 COPY package.json .
 
-# Cloud Run uses the PORT environment variable.
+# Ensure data directory exists for local mirror and state caching
+RUN mkdir -p /app/data
+
 ENV PORT=8080
+ENV NODE_ENV=production
+ENV BODY_SIZE_LIMIT=0
+
 EXPOSE 8080
 
-# Start the application
 CMD ["node", "build/index.js"]

@@ -46,6 +46,23 @@ cp .env.example .env    # then fill in the values below
 npm run dev
 ```
 
+### Running with Docker (Local)
+
+To run the application locally inside Docker:
+
+```sh
+# Start the container (builds automatically on first run)
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+
+# Stop the container
+docker compose down
+```
+
+The app will be running at `http://localhost:8080`. Your git mirrors and cached state are persisted in `./data` via a mounted volume.
+
 ### Configuration
 
 | Variable                                        | Needed for  | Meaning                                                                                                                                         |

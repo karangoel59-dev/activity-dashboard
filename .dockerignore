@@ -5,3 +5,6 @@ build
 .git
 .gitignore
 README.md
+data
+.DS_Store
+.vscode

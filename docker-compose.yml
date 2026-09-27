@@ -1,20 +1,25 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    image: svelte-app-local
+    image: dashboard-local:latest
+    container_name: dashboard-app
+    restart: unless-stopped
     ports:
       - '8080:8080'
+    env_file:
+      - .env
     environment:
       - PORT=8080
       - BODY_SIZE_LIMIT=0
-      # Add any necessary local environment variables here
-      # - GOOGLE_TRANSLATE_API_KEY=your_key_here
-
-    # Optional: If you want to persist your SQLite database locally between container restarts,
-    # you can mount a volume. Assuming your SQLite DB is stored in a 'data' folder:
-    # volumes:
-    #   - ./data:/app/data
+      - GITHUB_TOKEN
+    volumes:
+      # Persists git mirrors, cached state, and SQLite DBs locally
+      - ./data:/app/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
