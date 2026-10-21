@@ -8,6 +8,9 @@
  *   links: [2026-09-20-101133]
  *   ---
  *
+ * Entries sit at the top of the folder or inside notebooks (sub-folders, which can nest). Hidden
+ * folders are skipped, as Forward Flow does, and so are notebooks named in FFLOW_EXCLUDE.
+ *
  * The source of truth is the entries' git repository on GitHub (FFLOW_REPO), which Forward Flow
  * pushes to after every save. If that cannot be reached, the local folder is shown instead.
  */
@@ -19,6 +22,7 @@ import { graphql, repoToken } from './github';
 
 export interface FlowEntry {
 	id: string; // file name without .md
+	notebook: string; // folder path within the vault, e.g. "work"; '' for the top level
 	created: string; // ISO timestamp
 	tags: string[];
 	related: string[]; // ids of linked entries, in either direction
@@ -85,18 +89,37 @@ function createdFromName(name: string) {
 
 interface RawFile {
 	name: string; // e.g. 2026-09-21-143012.md
+	notebook: string;
 	raw: string;
 }
+
+/** Hidden folders, and notebooks named in FFLOW_EXCLUDE (with the notebooks inside them). */
+function skipNotebook(notebook: string): boolean {
+	if (notebook.split('/').some((part) => part.startsWith('.'))) return true;
+	const lower = notebook.toLowerCase();
+	return (env.FFLOW_EXCLUDE || '')
+		.split(',')
+		.map((name) =>
+			name
+				.trim()
+				.replace(/^\/+|\/+$/g, '')
+				.toLowerCase()
+		)
+		.some((name) => name && (lower === name || lower.startsWith(name + '/')));
+}
+
+const inNotebook = (notebook: string, name: string) => (notebook ? `${notebook}/${name}` : name);
 
 /** Every entry, newest first, with each entry's related entries resolved. */
 function buildEntries(files: RawFile[]): FlowEntry[] {
 	const parsed = files
 		.filter(({ name }) => name.endsWith('.md') && !name.startsWith('.'))
-		.map(({ name, raw }) => {
+		.map(({ name, notebook, raw }) => {
 			const { fm, body } = splitFrontmatter(raw);
 			const id = name.slice(0, -3);
 			return {
 				id,
+				notebook,
 				created: frontmatterValue(fm, 'created') || createdFromName(id),
 				tags: parseList(frontmatterValue(fm, 'tags')),
 				links: parseList(frontmatterValue(fm, 'links')),
@@ -104,7 +127,9 @@ function buildEntries(files: RawFile[]): FlowEntry[] {
 				words: body.split(/\s+/).filter(Boolean).length
 			};
 		})
-		.sort((a, b) => b.id.localeCompare(a.id)); // names are timestamps, so name order is time order
+		.sort((a, b) => b.id.localeCompare(a.id)) // names are timestamps, so name order is time order
+		// The same file name in two notebooks would collide as an id; keep the first
+		.filter((entry, i, all) => i === 0 || entry.id !== all[i - 1].id);
 
 	// Links are symmetric: an entry is related to what it links to and to whatever links to it,
 	// so a half-written pair still shows up on both sides.
@@ -119,8 +144,9 @@ function buildEntries(files: RawFile[]): FlowEntry[] {
 		}
 	}
 
-	return parsed.map(({ id, created, tags, body, words }) => ({
+	return parsed.map(({ id, notebook, created, tags, body, words }) => ({
 		id,
+		notebook,
 		created,
 		tags,
 		body,
@@ -131,20 +157,24 @@ function buildEntries(files: RawFile[]): FlowEntry[] {
 
 // ---------------------------------------------------------------- local folder
 
+function localFiles(dir: string, notebook = ''): RawFile[] {
+	return fs.readdirSync(path.join(dir, notebook), { withFileTypes: true }).flatMap((item) => {
+		const rel = inNotebook(notebook, item.name);
+		try {
+			if (item.isDirectory()) return skipNotebook(rel) ? [] : localFiles(dir, rel);
+			return item.name.endsWith('.md')
+				? [{ name: item.name, notebook, raw: fs.readFileSync(path.join(dir, rel), 'utf-8') }]
+				: [];
+		} catch {
+			return []; // unreadable file or folder: skip it rather than fail the whole page
+		}
+	});
+}
+
 function readLocal(): { dir: string; entries: FlowEntry[] } | null {
 	const dir = vaultDir();
 	if (!dir) return null;
-
-	const files = fs.readdirSync(dir).flatMap((name) => {
-		try {
-			return name.endsWith('.md')
-				? [{ name, raw: fs.readFileSync(path.join(dir, name), 'utf-8') }]
-				: [];
-		} catch {
-			return []; // unreadable file: skip it rather than fail the whole page
-		}
-	});
-	return { dir, entries: buildEntries(files) };
+	return { dir, entries: buildEntries(localFiles(dir)) };
 }
 
 // ---------------------------------------------------------------- GitHub repository
@@ -155,12 +185,19 @@ const HEAD_QUERY = `query($owner: String!, $name: String!) {
 	}
 }`;
 
+// GraphQL cannot recurse, so the query spells out each level: the top and this many notebook levels
+const NOTEBOOK_DEPTH = 4;
+const treeFields = (levels: number): string =>
+	`entries { name type object { ... on Blob { text }${
+		levels > 0 ? ` ... on Tree { ${treeFields(levels - 1)} }` : ''
+	} } }`;
+
 // The whole folder in one request: every file's name and text at that commit
 const TREE_QUERY = `query($owner: String!, $name: String!, $oid: GitObjectID!) {
 	repository(owner: $owner, name: $name) {
 		object(oid: $oid) {
 			... on Commit {
-				tree { entries { name type object { ... on Blob { text } } } }
+				tree { ${treeFields(NOTEBOOK_DEPTH)} }
 			}
 		}
 	}
@@ -172,12 +209,24 @@ interface HeadResult {
 	} | null;
 }
 
+interface TreeEntry {
+	name: string;
+	type: string;
+	object: { text?: string | null; entries?: TreeEntry[] } | null;
+}
+
 interface TreeResult {
-	repository: {
-		object: {
-			tree: { entries: { name: string; type: string; object: { text?: string | null } | null }[] };
-		} | null;
-	} | null;
+	repository: { object: { tree: { entries: TreeEntry[] } } | null } | null;
+}
+
+function treeFiles(entries: TreeEntry[], notebook = ''): RawFile[] {
+	return entries.flatMap((e) => {
+		const rel = inNotebook(notebook, e.name);
+		if (e.type === 'tree') return skipNotebook(rel) ? [] : treeFiles(e.object?.entries ?? [], rel);
+		return e.type === 'blob' && typeof e.object?.text === 'string'
+			? [{ name: e.name, notebook, raw: e.object.text }]
+			: [];
+	});
 }
 
 interface RepoSnapshot {
@@ -216,16 +265,11 @@ async function readRepo(repo: string): Promise<RepoSnapshot> {
 		.repository?.object?.tree;
 	if (!tree) throw new Error(`could not read the files of ${repo}`);
 
-	const files = tree.entries.flatMap((e) =>
-		e.type === 'blob' && typeof e.object?.text === 'string'
-			? [{ name: e.name, raw: e.object.text }]
-			: []
-	);
 	return (snapshot = {
 		repo,
 		oid: head.oid,
 		committedAt: head.committedDate,
-		entries: buildEntries(files),
+		entries: buildEntries(treeFiles(tree.entries)),
 		checkedAt: Date.now()
 	});
 }

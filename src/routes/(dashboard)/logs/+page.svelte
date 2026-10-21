@@ -33,7 +33,7 @@
 		return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 	});
 
-	// A query starting with # matches tags only; anything else matches date, prose and tags together
+	// A query starting with # matches tags only; anything else matches date, notebook, prose and tags
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		const tagsOnly = q.startsWith('#');
@@ -45,7 +45,10 @@
 			const inTags = entry.tags.some((tag) => tag.includes(needle));
 			return tagsOnly
 				? inTags
-				: inTags || entry.id.includes(needle) || entry.body.toLowerCase().includes(needle);
+				: inTags ||
+						entry.id.includes(needle) ||
+						entry.notebook.toLowerCase().includes(needle) ||
+						entry.body.toLowerCase().includes(needle);
 		});
 		return sort === 'desc' ? rows : [...rows].reverse();
 	});
@@ -149,7 +152,7 @@
 					id="search"
 					type="search"
 					bind:value={query}
-					placeholder="Search words, a date, or #tag"
+					placeholder="Search words, a date, a notebook, or #tag"
 					aria-label="Search entries"
 					class="field w-full py-2 pl-9"
 				/>
@@ -200,7 +203,12 @@
 							class="card rise flex min-w-0 scroll-mt-24 flex-col gap-3 p-5 transition-[box-shadow,border-color] hover:border-line-strong hover:shadow-md"
 						>
 							<header class="flex items-center justify-between text-xs text-ink-3">
-								<span class="font-medium text-ink-2 tabular-nums">{time(entry.created)}</span>
+								<span class="flex min-w-0 items-center gap-1.5">
+									<span class="font-medium text-ink-2 tabular-nums">{time(entry.created)}</span>
+									{#if entry.notebook}
+										<span class="truncate" title="Notebook">· {entry.notebook}</span>
+									{/if}
+								</span>
 								<span class="tabular-nums"
 									>{entry.words} {entry.words === 1 ? 'word' : 'words'}</span
 								>
@@ -296,7 +304,10 @@
 			<div class="flex max-h-[85vh] flex-col gap-3 overflow-y-auto p-6">
 				<header class="flex items-start justify-between gap-4 text-xs text-ink-3">
 					<span class="font-medium text-ink-2 tabular-nums"
-						>{dayLabel(localDay(openEntry.created))} · {time(openEntry.created)}</span
+						>{dayLabel(localDay(openEntry.created))} · {time(
+							openEntry.created
+						)}{#if openEntry.notebook}
+							· {openEntry.notebook}{/if}</span
 					>
 					<button
 						type="button"
