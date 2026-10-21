@@ -73,6 +73,7 @@ The app will be running at `http://localhost:8080`. Your git mirrors and cached 
 | `DASHBOARD_PASSWORD`                            | hosting     | When set, every request needs it (HTTP Basic: any username, this password). **Set this on anything reachable from the internet.**               |
 | `GIT_AUTHOR_EMAILS`                             | full mode   | Commit emails GitHub cannot tie to an account, e.g. `me@gmail.com`. Comma separated.                                                            |
 | `FFLOW_REPO`                                    | Journal     | `owner/name` of the repository Forward Flow syncs entries to.                                                                                   |
+| `FFLOW_EXCLUDE`                                 | Journal     | Optional, e.g. `passwords,private`: notebooks (folders) to leave out, with the notebooks inside them.                                           |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` | AI insights | Optional. Only your machine needs them; a hosted copy shows what it already produced.                                                           |
 | `JIRA_PROJECTS`                                 | Metrics     | Optional, e.g. `AA,CPD`: count only these ticket prefixes.                                                                                      |
 
